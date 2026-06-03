@@ -1,0 +1,126 @@
+{
+  "name": "Notification (уведомления)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "notification",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -96,
+        -16
+      ],
+      "id": "c6c1d926-ee31-4883-8422-b8d4d1c42c5e",
+      "name": "Webhook",
+      "webhookId": "5b0a315d-8f9c-4e47-858f-da17bb731cac"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================\n// NOTIFICATION - уведомления\n// ============================================\n\nconst data = $input.first().json;\n\nconsole.log(`📧 ОТПРАВКА УВЕДОМЛЕНИЯ`);\nconsole.log(`📦 Заказ: ${data.orderId}`);\nconsole.log(`💰 Сумма: ${data.total} руб.`);\nconsole.log(`💳 Счет: ${data.invoiceId}`);\n\n// Формируем сообщение\nconst message = `\n🎉 ЗАКАЗ ВЫПОЛНЕН!\n\n━━━━━━━━━━━━━━━━━━━━━\n📋 Номер заказа: ${data.orderId}\n💰 Сумма: ${data.total} руб.\n💳 Номер счета: ${data.invoiceId}\n📦 Товаров: ${data.items} шт.\n⏰ Время: ${new Date().toLocaleString()}\n━━━━━━━━━━━━━━━━━━━━━\n\nСпасибо за покупку!\n`;\n\nconsole.log('📝 Сообщение отправлено клиенту');\n\nreturn [{\n  json: {\n    sent: true,\n    orderId: data.orderId,\n    customerId: data.customerId,\n    message: message.substring(0, 100) + '...'\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        112,
+        -16
+      ],
+      "id": "2054054e-5989-4710-9793-6a4045709f73",
+      "name": "\"Send Notification\""
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        512,
+        -16
+      ],
+      "id": "5e330462-055c-4809-b939-97c7bd2606bc",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================\n// ОТПРАВКА УВЕДОМЛЕНИЯ В EVENT STORE\n// ============================================\n\nconst data = $input.first().json;\n\n// Формируем событие\nconst eventData = {\n  eventId: 'notif_' + Date.now(),\n  eventType: 'notification.sent',\n  timestamp: new Date().toISOString(),\n  data: {\n    orderId: data.orderId,\n    customerId: data.customerId\n  },\n  source: 'notification'\n};\n\nconsole.log('📧 Отправляем в Event Store:', eventData);\nconsole.log('📦 Заказ:', data.orderId);\nconsole.log('👤 Клиент:', data.customerId);\n\n// Отправляем HTTP запрос\nawait $http.post('/webhook/event-store', {\n  headers: {\n    'Content-Type': 'application/json'\n  },\n  body: eventData\n});\n\nconsole.log('✅ Событие уведомления сохранено');\n\nreturn [data];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        304,
+        -16
+      ],
+      "id": "ed9fdaa5-07b4-47f5-b71a-6b37eca28e4a",
+      "name": "ОТПРАВКА УВЕДОМЛЕНИЯ В EVENT STORE"
+    },
+    {
+      "parameters": {
+        "content": "### 1. Принимает уведомления от Order Processor\n### 2. Форматирует сообщение\n### 3. Отправляет Email клиенту\n### 4. (Опционально) Telegram / SMS\n### 5. Логирует факт отправки в Event Store\n### Этот сервис отвечает за коммуникацию с клиентом. Он отделён от основной логики, чтобы сбой в уведомлениях не влиял на обработку заказов. Асинхронность позволяет отправлять уведомления в фоне.",
+        "height": 176,
+        "width": 640,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -96,
+        128
+      ],
+      "typeVersion": 1,
+      "id": "177ea5b2-d039-4a2e-a19a-a79810724a03",
+      "name": "Sticky Note"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "\"Send Notification\"",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "\"Send Notification\"": {
+      "main": [
+        [
+          {
+            "node": "ОТПРАВКА УВЕДОМЛЕНИЯ В EVENT STORE",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ОТПРАВКА УВЕДОМЛЕНИЯ В EVENT STORE": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "6803aa7b-9242-4088-a37b-e93323e132b0",
+  "meta": {
+    "instanceId": "c5145ab924151884e2e9aaaf11db5ed4cc1a6cefad55ef510178d8a102ebe24b"
+  },
+  "id": "v171bQ6Lpyei1y8x",
+  "tags": []
+}

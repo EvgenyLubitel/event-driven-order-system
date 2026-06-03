@@ -1,0 +1,142 @@
+{
+  "name": "Dead Letter Queue (ошибки)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "dead-letter",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -144,
+        0
+      ],
+      "id": "a2ccb2db-0ffc-4113-968b-4b301fab8bbd",
+      "name": "Webhook",
+      "webhookId": "225838b6-dc82-4893-9b11-a14ce4afdaea"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================\n// DEAD LETTER QUEUE - обработка ошибок\n// ============================================\n\nconst failed = $input.first().json;\n\nconsole.log('💀 ОШИБКА В DEAD LETTER QUEUE');\nconsole.log(`📦 Заказ: ${failed.task?.orderId}`);\nconsole.log(`❌ Ошибка: ${failed.error?.message}`);\nconsole.log(`🔁 Попыток: ${failed.error?.retryCount || 0}`);\n\n// Сохраняем ошибку в Event Store\nawait $http.post('/webhook/event-store', {\n  body: {\n    eventId: 'err_' + Date.now(),\n    eventType: 'order.failed',\n    timestamp: new Date().toISOString(),\n    data: {\n      orderId: failed.task?.orderId,\n      taskId: failed.task?.taskId,\n      error: failed.error?.message,\n      retryCount: failed.error?.retryCount || 0\n    },\n    source: 'dead-letter-queue'\n  }\n});\n\nreturn [{\n  json: {\n    processed: true,\n    taskId: failed.task?.taskId,\n    orderId: failed.task?.orderId,\n    error: failed.error?.message,\n    action: 'logged'\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        64,
+        0
+      ],
+      "id": "b4817402-6644-4994-9ee0-d48efad73b5a",
+      "name": "\"Handle Error\""
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================\n// ОТПРАВКА В EVENT STORE (Dead Letter Queue)\n// ============================================\n\nconst data = $input.first().json;\n\n// Формируем событие\nconst eventData = {\n  eventId: 'err_' + Date.now(),\n  eventType: 'error.logged',\n  timestamp: new Date().toISOString(),\n  data: {\n    orderId: data.orderId,\n    error: data.error\n  },\n  source: 'dead-letter-queue'\n};\n\nconsole.log('💀 Отправляем в Event Store:', eventData);\n\n// Отправляем HTTP запрос\nawait $http.post('/webhook/event-store', {\n  headers: {\n    'Content-Type': 'application/json'\n  },\n  body: eventData\n});\n\nconsole.log('✅ Событие ошибки сохранено');\n\nreturn [data];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        272,
+        0
+      ],
+      "id": "e7493c6c-ac2a-49bf-a466-c785e63bd4d9",
+      "name": "ОТПРАВКА В EVENT STORE"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        480,
+        0
+      ],
+      "id": "8b3695f0-68ea-4756-b36c-9675db53eb85",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "content": "### 1. Принимает задачи, которые не удалось обработать после 3 попыток\n### 2. Логирует ошибку и контекст\n### 3. Отправляет уведомление администратору\n### 4. Сохраняет в отдельное хранилище для ручного разбора",
+        "height": 112,
+        "width": 464,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -160,
+        128
+      ],
+      "typeVersion": 1,
+      "id": "117e3be7-c781-465c-8061-981dc21d540b",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "### Dead Letter Queue — это страховка. Если заказ не удалось обработать после Dead Letter Queue — это страховка. Если заказ не удалось обработать после всех retry, он попадает сюда. Администратор видит ошибку и может разобраться вручную. Ни один заказ не теряется. всех retry, он попадает сюда. Администратор видит ошибку и может разобраться вручную. Ни один заказ не теряется.",
+        "height": 112,
+        "width": 464,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -160,
+        240
+      ],
+      "typeVersion": 1,
+      "id": "e4ac4840-c75a-4ced-bbd6-e4ea2d8d887d",
+      "name": "Sticky Note1"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "\"Handle Error\"",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "\"Handle Error\"": {
+      "main": [
+        [
+          {
+            "node": "ОТПРАВКА В EVENT STORE",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ОТПРАВКА В EVENT STORE": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "45127a7e-6b1c-4d80-b8d3-a17e45b37b13",
+  "meta": {
+    "instanceId": "c5145ab924151884e2e9aaaf11db5ed4cc1a6cefad55ef510178d8a102ebe24b"
+  },
+  "id": "rDrQuMm6rm8qmVJT",
+  "tags": []
+}

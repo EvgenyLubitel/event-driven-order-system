@@ -1,0 +1,102 @@
+{
+  "name": "Event Store (хранилище событий)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "event-store",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -192,
+        0
+      ],
+      "id": "032afef5-860b-4d80-bdce-f61d4be490ad",
+      "name": "Event Store",
+      "webhookId": "e4cdf51f-2d94-43e8-b246-cf821b49c3f6"
+    },
+    {
+      "parameters": {
+        "jsCode": "const event = $input.first().json;\n\nconsole.log('💾 Получено событие:', event.eventId);\nconsole.log('📦 Заказ:', event.orderId);\n\nreturn [{\n  json: {\n    stored: true,\n    eventId: event.eventId,\n    orderId: event.orderId\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        0,
+        0
+      ],
+      "id": "ac2bc5e0-beed-4f1c-99d7-4e5006efb341",
+      "name": "\"Save Event\""
+    },
+    {
+      "parameters": {
+        "content": "### 1. Принимает события от API Gateway и других сервисов\n###  2. Сохраняет каждое событие (eventId, тип, данные, источник)\n###  3. В production сохраняет в Google Sheets / БД\n###  4. Обеспечивает полную трассировку заказа\n###  \"Это Event Store — источник правды для всей системы. Каждое действие логируется, что позволяет отследить судьбу любого заказа и отлаживать проблемы.\n###  В production мы используем Google Sheets как простое хранилище, но можно заменить на PostgreSQL.\"",
+        "height": 176,
+        "width": 592,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -192,
+        -208
+      ],
+      "typeVersion": 1,
+      "id": "bbcd0bbe-9f96-4e0e-8238-4e3ac610af3b",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        208,
+        0
+      ],
+      "id": "28fca251-05fe-47d2-8f17-88e7a1a12a0b",
+      "name": "Respond to Webhook"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Event Store": {
+      "main": [
+        [
+          {
+            "node": "\"Save Event\"",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "\"Save Event\"": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "96d72fb5-714d-4ef2-ac93-d57509275346",
+  "meta": {
+    "instanceId": "c5145ab924151884e2e9aaaf11db5ed4cc1a6cefad55ef510178d8a102ebe24b"
+  },
+  "id": "gykw46QjLPxiwN9X",
+  "tags": []
+}

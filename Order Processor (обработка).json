@@ -1,0 +1,166 @@
+{
+  "name": "Order Processor (обработка)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "order-processor",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -160,
+        -32
+      ],
+      "id": "a312996b-652e-41ae-954c-e0d0cc855a49",
+      "name": "Webhook",
+      "webhookId": "6e1802ca-4a8e-4bf4-a7d9-0bee3e8b6e0e"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================\n// ORDER PROCESSOR - обработка заказа\n// ============================================\n\n// Получаем данные (могут быть в body или напрямую)\nlet input = $input.first().json;\n\nconsole.log('=== ВХОДНЫЕ ДАННЫЕ ===');\nconsole.log(JSON.stringify(input, null, 2));\n\n// Если данные в поле body (от API Gateway)\nif (input.body) {\n  input = input.body;\n}\n\n// Если данные в поле data\nif (input.data) {\n  input = input.data;\n}\n\nconst startTime = Date.now();\n\n// Извлекаем данные\nconst orderId = input.orderId || 'unknown';\nconst customerId = input.customerId || 'unknown';\nconst productId = input.productId || 'unknown';\nconst quantity = input.quantity || 0;\nconst total = input.total || 0;\n\nconsole.log('🔄 Обработка заказа:', orderId);\nconsole.log('👤 Клиент:', customerId);\nconsole.log('📦 Товар:', productId);\nconsole.log('🔢 Количество:', quantity);\nconsole.log('💰 Сумма:', total);\n\n// Имитация проверки склада\nawait new Promise(r => setTimeout(r, 500));\n\n// Формирование счета\nconst invoiceId = 'inv_' + Date.now();\n\nconst result = {\n  success: true,\n  orderId: orderId,\n  invoiceId: invoiceId,\n  duration: Date.now() - startTime,\n  status: 'completed',\n  productId: productId,\n  quantity: quantity,\n  total: total,\n  customerId: customerId\n};\n\nconsole.log('✅ Заказ ' + orderId + ' выполнен за ' + result.duration + 'ms');\n\nreturn [{\n  json: result\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        48,
+        -32
+      ],
+      "id": "ba36fa4a-ad91-4e97-b553-20e184bfc463",
+      "name": "\"Process Order\""
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        672,
+        -32
+      ],
+      "id": "a13da16a-11ca-4647-901c-8faaf93e3641",
+      "name": "Respond to Webhook"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================\n// СОХРАНЕНИЕ РЕЗУЛЬТАТА В EVENT STORE\n// ============================================\n\nconst data = $input.first().json;\n\nconst eventData = {\n  eventId: 'evt_' + Date.now(),\n  eventType: 'order.completed',\n  timestamp: new Date().toISOString(),\n  data: data,\n  source: 'order-processor'\n};\n\nconsole.log('📤 Сохраняем результат в Event Store');\nconsole.log('📦 Заказ:', data.orderId);\nconsole.log('💰 Сумма:', data.total);\n\nawait $http.post('/webhook/event-store', {\n  headers: { 'Content-Type': 'application/json' },\n  body: eventData\n});\n\nconsole.log('✅ Результат сохранен');\n\nreturn [data];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        256,
+        -32
+      ],
+      "id": "ea188b48-a97a-4cfb-8de5-7775bf1ce5d1",
+      "name": "СОХРАНЕНИЕ РЕЗУЛЬТАТА В EVENT STORE"
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================\n// ОТПРАВКА В NOTIFICATION\n// ============================================\n\nconst data = $input.first().json;\n\nconsole.log('📧 Отправляем уведомление для заказа:', data.orderId);\n\nawait $http.post('/webhook/notification', {\n  headers: { 'Content-Type': 'application/json' },\n  body: data\n});\n\nconsole.log('✅ Уведомление отправлено');\n\nreturn [data];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        -32
+      ],
+      "id": "52315ee4-095f-4c31-8724-aafd7868f5ce",
+      "name": "ОТПРАВКА В NOTIFICATION"
+    },
+    {
+      "parameters": {
+        "content": "### 1. Забирает задачи из очереди (HTTP webhook)\n### 2. Проверяет наличие товаров на складе (имитация)\n### 3. Резервирует товары\n### 4. Формирует счёт\n### 5. Отправляет результат в Event Store и Notification\n### 6. Поддерживает retry механизм при ошибках\n\n\n### Технические детали:\n### Триггер: Webhook (очередь)\n### Retry: 3 попытки с экспоненциальной задержкой\n### Timeout: 5 секунд на операцию",
+        "height": 256,
+        "width": 400,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -176,
+        112
+      ],
+      "typeVersion": 1,
+      "id": "f0f88a14-995f-4f16-b70a-8af5348d1816",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "### Это основной обработчик. Он работает асинхронно: заказ может быть в очереди, даже если процессор временно недоступен. Retry механизм с экспоненциальной задержкой гарантирует, что временные сбои не приведут к потере заказов.",
+        "height": 80,
+        "width": 560,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        224,
+        112
+      ],
+      "typeVersion": 1,
+      "id": "ded3bbfe-a171-49d1-8973-050cde2c849a",
+      "name": "Sticky Note1"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "\"Process Order\"",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "\"Process Order\"": {
+      "main": [
+        [
+          {
+            "node": "СОХРАНЕНИЕ РЕЗУЛЬТАТА В EVENT STORE",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "СОХРАНЕНИЕ РЕЗУЛЬТАТА В EVENT STORE": {
+      "main": [
+        [
+          {
+            "node": "ОТПРАВКА В NOTIFICATION",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ОТПРАВКА В NOTIFICATION": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "0c9adaf3-b57e-4aed-8350-ce86b5128697",
+  "meta": {
+    "instanceId": "c5145ab924151884e2e9aaaf11db5ed4cc1a6cefad55ef510178d8a102ebe24b"
+  },
+  "id": "qqpWNcnvohi0wEPY",
+  "tags": []
+}

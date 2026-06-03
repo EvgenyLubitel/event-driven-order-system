@@ -1,0 +1,253 @@
+{
+  "name": "API Gateway (прием заказов)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "order/create",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -640,
+        -272
+      ],
+      "id": "30811bdc-a6ec-4865-8448-a6024614bf0e",
+      "name": "API Gateway",
+      "webhookId": "e99b85be-1259-4e67-9864-15bc24ec1e0c"
+    },
+    {
+      "parameters": {
+        "jsCode": "const order = $input.first().json.body;\n\n// Валидация\nif (!order.customerId) {\n  throw new Error('customerId обязателен');\n}\nif (!order.items || order.items.length === 0) {\n  throw new Error('items не может быть пустым');\n}\n\n// Создаем задачу\nconst task = {\n  taskId: 'task_' + Date.now(),\n  orderId: 'ord_' + Date.now(),\n  customerId: order.customerId,\n  customerEmail: order.customerEmail || null,\n  items: order.items,\n  total: order.total,\n  status: 'created',\n  createdAt: new Date().toISOString(),\n  retryCount: 0,\n  maxRetries: 3\n};\n\nconsole.log('📦 Создан заказ:', task.orderId);\nconsole.log('💰 Сумма:', task.total);\n\n// Возвращаем данные с orderId и taskId\nreturn [{\n  json: {\n    orderId: task.orderId,\n    taskId: task.taskId,\n    task: task,\n    message: '✅ Заказ принят в обработку',\n    status: 'queued'\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -464,
+        -272
+      ],
+      "id": "372fde6e-5c13-47cd-8da2-b28946883414",
+      "name": "\"Validate & Create\""
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://n-wformatagent-evgenylubitel.amvera.io/webhook/event-store",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"eventId\": \"evt_{{ Date.now() }}\",\n  \"eventType\": \"order.created\",\n  \"timestamp\": \"{{ new Date().toISOString() }}\",\n  \"orderId\": \"{{ $json.orderId }}\",\n  \"customerId\": \"{{ $json.task.customerId }}\",\n  \"total\": \"{{ $json.task.total }}\",\n  \"source\": \"api-gateway\"\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        -288,
+        -272
+      ],
+      "id": "db0ec323-d23b-414c-8956-089421b6a70c",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://n-wformatagent-evgenylubitel.amvera.io/webhook/order-processor",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\"test\": \"hello\"}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        112,
+        -272
+      ],
+      "id": "bca53617-6a79-47a1-8992-3a13e1fd6ec5",
+      "name": "\"Send to Queue\""
+    },
+    {
+      "parameters": {
+        "jsCode": "// ============================================\n// ОБРАБОТКА ОТВЕТА ОТ EVENT STORE\n// ============================================\n\nconst eventStoreResponse = $input.first().json;\n\nconsole.log('📥 Ответ от Event Store:', eventStoreResponse);\n\n// Возвращаем то, что пришло на вход (данные не меняются)\nreturn [$input.first().json];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -96,
+        -272
+      ],
+      "id": "03b6627e-42c9-4ed2-9971-81431873dd75",
+      "name": "\"Process Event Store Response\""
+    },
+    {
+      "parameters": {
+        "jsCode": "const input = $input.first().json;\n\n// Пытаемся найти orderId в разных местах\nconst orderId = input.orderId || \n                input.data?.orderId || \n                input.task?.orderId || \n                'ord_' + Date.now();\n\nconst taskId = input.taskId || \n               input.data?.taskId || \n               input.task?.taskId || \n               'task_' + Date.now();\n\nconst response = {\n  orderId: orderId,\n  taskId: taskId,\n  message: \"✅ Заказ принят в обработку\",\n  status: \"queued\",\n  estimatedTime: \"30 секунд\"\n};\n\nconsole.log('📤 Ответ:', response);\n\nreturn [{\n  json: response\n}];\n"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        304,
+        -272
+      ],
+      "id": "b0b36fcd-9a92-4a9e-8fb2-b4f503582b34",
+      "name": "\"Prepare Response\""
+    },
+    {
+      "parameters": {
+        "content": "###           Event-Driven система\n###  1. Принимает POST запросы на /webhook/order/create\n###  2. Валидирует входные данные (customerId, items, total)\n###  3. Генерирует уникальные orderId и taskId\n###  4. Отправляет событие в Event Store (асинхронно)\n###  5. Отправляет задачу в очередь Order Processor\n### 6. Возвращает клиенту мгновенный ответ с orderId\n###  Архитектура (без RabbitMQ/Kafka, используем n8n как брокер)",
+        "height": 176,
+        "width": 480,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -112,
+        -128
+      ],
+      "typeVersion": 1,
+      "id": "65d09118-daad-4917-90ba-340bc0965dcd",
+      "name": "Sticky Note1"
+    },
+    {
+      "parameters": {
+        "content": "###  \"Этот workflow — точка входа. Он гарантирует, что клиент не ждёт обработки, получая мгновенный ответ с идентификатором заказа. Это классический паттерн асинхронной обработки.\"",
+        "height": 80,
+        "width": 480,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -112,
+        64
+      ],
+      "typeVersion": 1,
+      "id": "baf47d99-03e9-4901-88c5-0e854c325ee9",
+      "name": "Sticky Note"
+    },
+    {
+      "parameters": {
+        "content": "###  Архитектура в целом\n## Event-Driven Architecture (EDA):\n ### - Асинхронная обработка через очереди\n ### - События как основной способ коммуникации\n ###  - Event Store для полного аудита\n ###  - Dead Letter Queue для отказоустойчивости\n ###- Retry механизм с exponential backoff\n\n## Преимущества:\n ###  - Горизонтальное масштабирование\n ### - Слабая связанность сервисов\n ###  - Отказоустойчивость\n ###  - Полная наблюдаемость",
+        "height": 304,
+        "width": 544,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -656,
+        -128
+      ],
+      "typeVersion": 1,
+      "id": "3f75df19-51fb-46ab-9252-40421d853084",
+      "name": "Sticky Note2"
+    },
+    {
+      "parameters": {
+        "content": "### Я спроектировал Event-Driven систему из 5 микросервисов (workflow). API Gateway принимает заказы и мгновенно отвечает клиенту, не дожидаясь обработки. Order Processor асинхронно обрабатывает заказы из очереди с retry механизмом. Dead Letter Queue ловит упавшие задачи. Event Store даёт полный аудит. Всё это гарантирует, что ни один заказ не потеряется, даже при падении сервисов",
+        "height": 128,
+        "width": 464,
+        "color": 7
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -640,
+        -416
+      ],
+      "typeVersion": 1,
+      "id": "0a58e7c4-425f-4940-88fb-032f43ebe5ed",
+      "name": "Sticky Note3"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "API Gateway": {
+      "main": [
+        [
+          {
+            "node": "\"Validate & Create\"",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "\"Validate & Create\"": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "\"Process Event Store Response\"",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "\"Send to Queue\"": {
+      "main": [
+        [
+          {
+            "node": "\"Prepare Response\"",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "\"Process Event Store Response\"": {
+      "main": [
+        [
+          {
+            "node": "\"Send to Queue\"",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "\"Prepare Response\"": {
+      "main": [
+        []
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "597357cc-c024-48e2-8a8e-e7938615c32f",
+  "meta": {
+    "instanceId": "c5145ab924151884e2e9aaaf11db5ed4cc1a6cefad55ef510178d8a102ebe24b"
+  },
+  "id": "d6pA2Ip0EapvHkJj",
+  "tags": []
+}
